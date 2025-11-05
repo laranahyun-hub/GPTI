@@ -1,0 +1,153 @@
+<!-- 저장: dot_shape_test.html 로 저장한 후 브라우저에서 열기 -->
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>○△□S 도형 체험 테스트</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR"; padding:18px; }
+  .wrap { display:flex; gap:20px; align-items:flex-start; }
+  .toolbar { width:160px; }
+  .toolbar button { display:block; width:100%; margin:8px 0; padding:10px; font-size:16px; }
+  #canvasWrap { border:1px solid #ccc; width:600px; height:600px; position:relative; }
+  canvas { background:#faf7f5; display:block; }
+  .controls { margin-top:12px; }
+  .results { margin-top:12px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<h2>○△□S 도형 심리 체험 (체험용)</h2>
+<p>왼쪽 도형 버튼을 클릭한 뒤, 캔버스(오른쪽)를 클릭해 원하는 위치에 도형을 배치하세요. 배치 순서가 기록됩니다.</p>
+
+<div class="wrap">
+  <div class="toolbar">
+    <button data-shape="circle">○ 동그라미</button>
+    <button data-shape="triangle">△ 세모</button>
+    <button data-shape="square">□ 네모</button>
+    <button data-shape="squiggle">S 물결</button>
+
+    <div class="controls">
+      <label>기본 크기: <input id="sizeInput" type="range" min="20" max="160" value="80"></label>
+      <button id="undoBtn">마지막 취소</button>
+      <button id="clearBtn">초기화</button>
+      <button id="resultBtn">결과보기</button>
+      <button id="downloadBtn">JSON 다운로드</button>
+    </div>
+  </div>
+
+  <div id="canvasWrap">
+    <canvas id="c" width="600" height="600"></canvas>
+  </div>
+</div>
+
+<div class="results" id="out"></div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let currentShape = null;
+const sizeInput = document.getElementById('sizeInput');
+const objects = []; // {type,x,y,size,order}
+const toolbarBtns = document.querySelectorAll('.toolbar button[data-shape]');
+
+toolbarBtns.forEach(btn=>{
+  btn.addEventListener('click', ()=> {
+    currentShape = btn.getAttribute('data-shape');
+    toolbarBtns.forEach(b=>b.style.opacity= b===btn ? 1 : 0.6);
+  });
+});
+document.getElementById('undoBtn').addEventListener('click', ()=>{
+  objects.pop(); redraw(); showSummary();
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  objects.length=0; redraw(); showSummary();
+});
+canvas.addEventListener('click', e=>{
+  if(!currentShape) { alert('도형을 먼저 선택하세요.'); return; }
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const size = Number(sizeInput.value);
+  const order = objects.length + 1;
+  objects.push({type: currentShape, x, y, size, order});
+  redraw();
+  showSummary();
+});
+
+function redraw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#333';
+  ctx.fillStyle = 'rgba(0,0,0,0.02)';
+  objects.forEach(obj=>{
+    drawShape(obj);
+    // draw order number
+    ctx.fillStyle = '#000';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(String(obj.order), obj.x + 6, obj.y - 6);
+  });
+}
+
+function drawShape(obj){
+  const {type,x,y,size} = obj;
+  const r = size/2;
+  ctx.save();
+  ctx.beginPath();
+  if(type === 'circle'){
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.stroke();
+  } else if(type === 'square'){
+    ctx.rect(x - r, y - r, size, size);
+    ctx.stroke();
+  } else if(type === 'triangle'){
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x - r, y + r);
+    ctx.lineTo(x + r, y + r);
+    ctx.closePath();
+    ctx.stroke();
+  } else if(type === 'squiggle'){
+    // simple S-like bezier
+    ctx.moveTo(x - r, y - r);
+    ctx.bezierCurveTo(x + r, y - r, x - r, y + r, x + r, y + r);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function showSummary(){
+  const out = document.getElementById('out');
+  if(objects.length === 0){ out.textContent = '아직 배치된 도형이 없습니다.'; return; }
+  // 순서 텍스트
+  const orderText = objects.map(o => {
+    if(o.type==='circle') return '○';
+    if(o.type==='triangle') return '△';
+    if(o.type==='square') return '□';
+    if(o.type==='squiggle') return 'S';
+  }).join(' → ');
+  // 간단 해석 룰 (체험용)
+  const counts = objects.reduce((acc,o)=>{ acc[o.type]=(acc[o.type]||0)+1; return acc; },{});
+  const interpretations = [];
+  if(counts['circle']) interpretations.push('동그라미: 대인관계·감성 중시');
+  if(counts['triangle']) interpretations.push('세모: 목표지향·주도성');
+  if(counts['square']) interpretations.push('네모: 안정·체계성');
+  if(counts['squiggle']) interpretations.push('S: 창의성·자유성');
+  const suggestion = '체험용 해석: ' + interpretations.join(' / ');
+  out.textContent = `순서: ${orderText}\n개수: ${JSON.stringify(counts)}\n\n${suggestion}`;
+}
+
+document.getElementById('resultBtn').addEventListener('click', showSummary);
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const data = { timestamp: Date.now(), objects };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'shape_test_result.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+// 초기
+showSummary();
+</script>
+</body>
+</html>
