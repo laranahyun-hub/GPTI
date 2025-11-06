@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>○△□S 도형 심리테스트</title>
+<style>
+  body {
+    font-family: "Pretendard", sans-serif;
+    background: #fdf8f7;
+    color: #222;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+  }
+  h1 {
+    font-weight: 600;
+    color: #2a2a75;
+  }
+  p {
+    font-size: 14px;
+    color: #2a2a75;
+    line-height: 1.5em;
+    margin: 4px 0;
+  }
+
+  .square-wrapper {
+    position: relative;
+    width: 360px;
+    height: 360px;
+    margin: 40px auto;
+    border: 2px solid #c58a6a;
+  }
+
+  .inner-square {
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid #c58a6a;
+  }
+
+  .shapes {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px 0;
+  }
+
+  .shape-btn {
+    font-size: 28px;
+    cursor: pointer;
+    border: 2px solid #aaa;
+    border-radius: 6px;
+    padding: 8px 16px;
+    background: white;
+    transition: 0.2s;
+  }
+
+  .shape-btn:hover {
+    background: #eee;
+  }
+
+  canvas {
+    border: none;
+    cursor: crosshair;
+  }
+
+  .info {
+    font-size: 15px;
+    color: #2a2a75;
+    text-align: left;
+    width: 360px;
+    margin: 0 auto;
+  }
+
+  .result {
+    margin-top: 25px;
+    text-align: left;
+    width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+    color: #2a2a75;
+  }
+
+  .result input {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #2a2a75;
+    background: transparent;
+    font-size: 16px;
+    margin-bottom: 10px;
+    padding: 5px;
+  }
+
+  #interpret {
+    margin-top: 15px;
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.6em;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+  }
+</style>
+</head>
+<body>
+
+<h1>○△□S 도형 심리테스트</h1>
+<p>1) 4개의 도형 중에서 가장 마음에 드는 도형 1개를 골라 크기나 위치에 관계없이 3번 그려주세요.</p>
+<p>2) 나머지 3개의 도형도 크기·위치에 관련 없이 각각 1번씩 자유롭게 그려주세요.</p>
+
+<div class="square-wrapper">
+  <div class="inner-square"></div>
+  <canvas id="drawCanvas" width="360" height="360"></canvas>
+</div>
+
+<div class="shapes">
+  <button class="shape-btn" data-shape="circle">○</button>
+  <button class="shape-btn" data-shape="triangle">△</button>
+  <button class="shape-btn" data-shape="square">□</button>
+  <button class="shape-btn" data-shape="wave">S</button>
+</div>
+
+<div class="result">
+  <label>순서:</label>
+  <input type="text" id="order" placeholder="예: ○ △ □ S">
+  <label>결과:</label>
+  <input type="text" id="summary" placeholder="자동 해석 결과가 여기에 표시됩니다.">
+  <div id="interpret"></div>
+</div>
+
+<script>
+let currentShape = null;
+const canvas = document.getElementById('drawCanvas');
+const ctx = canvas.getContext('2d');
+
+// 도형 선택
+document.querySelectorAll('.shape-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentShape = btn.dataset.shape;
+  });
+});
+
+// 클릭해서 도형 그리기
+canvas.addEventListener('click', (e) => {
+  if (!currentShape) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  drawShape(x, y, currentShape);
+});
+
+function drawShape(x, y, type) {
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#2a2a75';
+  const size = 40;
+
+  switch(type) {
+    case 'circle':
+      ctx.beginPath();
+      ctx.arc(x, y, size/2, 0, Math.PI*2);
+      ctx.stroke();
+      break;
+    case 'triangle':
+      ctx.beginPath();
+      ctx.moveTo(x, y - size/2);
+      ctx.lineTo(x - size/2, y + size/2);
+      ctx.lineTo(x + size/2, y + size/2);
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    case 'square':
+      ctx.strokeRect(x - size/2, y - size/2, size, size);
+      break;
+    case 'wave':
+      ctx.beginPath();
+      for (let i = 0; i < 2; i++) {
+        ctx.moveTo(x - size/2, y + i*10);
+        ctx.bezierCurveTo(x - size/4, y - 10 + i*10, x + size/4, y + 10 + i*10, x + size/2, y + i*10);
+      }
+      ctx.stroke();
+      break;
+  }
+}
+
+// 간단한 해석 예시
+document.getElementById('order').addEventListener('input', () => {
+  const order = document.getElementById('order').value.trim();
+  let interpret = "";
+
+  if (order.includes('○')) interpret += "감성적이고 따뜻하며 관계 중심적입니다.<br>";
+  if (order.includes('△')) interpret += "목표 지향적이고 리더십이 강합니다.<br>";
+  if (order.includes('□')) interpret += "신중하고 체계적이며 안정감을 추구합니다.<br>";
+  if (order.includes('S')) interpret += "창의적이고 자유로운 사고를 지녔습니다.<br>";
+
+  document.getElementById('interpret').innerHTML = interpret || "도형 순서를 입력하면 해석이 표시됩니다.";
+});
+</script>
+
+</body>
+</html>
