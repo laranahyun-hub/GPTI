@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>○△□S 도형심리테스트</title>
+<style>
+  :root{--accent:#2a2a75;--frame:#c58a6a}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR";background:#fdf8f7;color:#222;margin:0;padding:18px;text-align:center}
+  h1{color:var(--accent);margin:0 0 8px;font-size:20px}
+  p.small{color:var(--accent);font-size:13px;margin:0 0 12px}
+  #boardWrap{display:inline-block;position:relative}
+  canvas{background:transparent;border:2px solid var(--frame);touch-action:none}
+  .innerBox{position:absolute;border:2px dashed #d6b09a;box-sizing:border-box;pointer-events:none}
+  .controls{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .shapeBtn{font-size:20px;padding:8px 12px;border-radius:6px;border:1px solid #aaa;background:#fff;cursor:pointer}
+  .shapeBtn.active{background:#efeefc;border-color:var(--accent);box-shadow:0 2px 6px rgba(42,42,117,0.08)}
+  #uiSmall{margin-top:8px;font-size:13px;color:#333}
+  #sizeControl{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}
+  input[type="range"]{width:180px}
+  .btnRow{margin-top:10px;display:flex;gap:8px;justify-content:center}
+  button.action{padding:8px 12px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer}
+  button.ghost{background:#fff;border:1px solid #cfcfcf;color:#333}
+  #result{width:360px;margin:14px auto 40px;text-align:left}
+  .card{background:#fff;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+  .meta{font-size:13px;color:#666;margin-bottom:8px}
+  .line{margin:6px 0}
+  @media(max-width:420px){canvas{width:320px;height:320px} #result{width:320px}}
+</style>
+</head>
+<body>
+
+<h1>○△□S 도형 심리테스트</h1>
+<p class="small">1) 4개 도형 중 가장 마음에 드는 도형 1개를 골라 크기/위치 관계없이 3번 그려주세요.<br>2) 나머지 3개 도형도 각각 1번씩 자유롭게 그려주세요.</p>
+
+<div id="boardWrap">
+  <!-- 360x360 캔버스(12cm≈360px) -->
+  <canvas id="canvas" width="360" height="360"></canvas>
+  <!-- inner square 6cm≈180px, centered -->
+  <div class="innerBox" id="inner" style="width:180px;height:180px;left:90px;top:90px"></div>
+</div>
+
+<div class="controls" aria-hidden>
+  <button class="shapeBtn" data-shape="circle">○</button>
+  <button class="shapeBtn" data-shape="triangle">△</button>
+  <button class="shapeBtn" data-shape="square">□</button>
+  <button class="shapeBtn" data-shape="wave">S</button>
+</div>
+
+<div id="uiSmall">
+  선택한 도형을 캔버스에 탭/클릭해 배치하세요. <strong>배치 후 도형을 다시 탭하면 선택</strong>되어 크기를 조절할 수 있습니다.
+</div>
+
+<div id="sizeControl" style="display:none">
+  <span>크기:</span>
+  <input id="sizeRange" type="range" min="20" max="140" value="40">
+  <span id="sizeVal">40</span> px
+</div>
+
+<div class="btnRow">
+  <button id="undo" class="ghost">Undo</button>
+  <button id="clear" class="ghost">초기화</button>
+  <button id="analyze" class="action">결과 보기</button>
+</div>
+
+<div id="result">
+  <div class="card">
+    <div class="meta">순서·위치 자동 판별 — 도형을 먼저 3번 그린 도형을 '선택 도형'으로 간주합니다.</div>
+    <div id="output">도형을 그려서 결과를 확인하세요.</div>
+  </div>
+</div>
+
+<script>
+/* ===== 데이터/유틸 ===== */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const inner = document.getElementById('inner');
+const sizeRange = document.getElementById('sizeRange');
+const sizeVal = document.getElementById('sizeVal');
+const shapeButtons = document.querySelectorAll('.shapeBtn');
+let currentTool = null;
+let shapes = []; // {id,type,x,y,size,order}
+let selectedId = null;
+let orderCounter = 0;
+
+/* 터치/마우스 좌표 계산 (캔버스 바운드에 맞춤) */
+function getPos(e){
+  const rect = canvas.getBoundingClientRect();
+  if (e.touches && e.touches[0]) {
+    return { x: (e.touches[0].clientX - rect.left) * (canvas.width/rect.width), y: (e.touches[0].clientY - rect.top) * (canvas.height/rect.height) };
+  } else {
+    return { x: (e.clientX - rect.left) * (canvas.width/rect.width), y: (e.clientY - rect.top) * (canvas.height/rect.height) };
+  }
+}
+
+/* ===== 도형 그리기(렌더) ===== */
+function drawAll(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // outer border (already by css), draw light helper grid thirds
+  // draw shapes in order
+  shapes.forEach(s => drawOne(s, s.id === selectedId));
+}
+
+function drawOne(s, highlight=false){
+  ctx.save();
+  ctx.lineWidth = highlight ? 3 : 2;
+  ctx.strokeStyle = highlight ? '#2a2a75' : '#333';
+  const x=s.x, y=s.y, r=s.size/2;
+  if (s.type === 'circle'){
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.stroke();
+  } else if (s.type === 'triangle'){
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x - r, y + r);
+    ctx.lineTo(x + r, y + r);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (s.type === 'square'){
+    ctx.beginPath();
+    ctx.rect(x - r, y - r, s.size, s.size);
+    ctx.stroke();
+  } else if (s.type === 'wave'){
+    // draw S-like path centered at (x,y), scaled by size
+    ctx.beginPath();
+    const w = s.size*0.9;
+    const h = s.size*0.7;
+    ctx.moveTo(x - w/2, y - h/2);
+    ctx.bezierCurveTo(x - w/4, y - h, x + w/4, y + h/4, x + w/2, y + h/2);
+    ctx.bezierCurveTo(x + w/4, y + h, x - w/4, y - h/4, x - w/2, y - h/2);
+    ctx.stroke();
+  }
+  // draw order small label
+  ctx.fillStyle = '#2a2a75';
+  ctx.font = '12px system-ui';
+  ctx.fillText(String(s.order), s.x + r - 12, s.y - r + 12);
+  ctx.restore();
+}
+
+/* ===== 인터랙션 ===== */
+// 툴 선택
+shapeButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    shapeButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTool = btn.dataset.shape;
+    selectedId = null; toggleSizeControl(false);
+  });
+});
+
+// 캔버스 탭/클릭 = 새 도형 추가 or 선택
+canvas.addEventListener('pointerdown', (ev)=>{
+  ev.preventDefault();
+  const pos = getPos(ev);
+  // 먼저 "도형 선택" 우선: 이미 그려진 도형에 탭했나?
+  const hit = shapes.slice().reverse().find(s => {
+    const dx = pos.x - s.x, dy = pos.y - s.y;
+    return Math.hypot(dx,dy) <= Math.max( (s.size/2), 20 );
+  });
+  if (hit){
+    // 선택 모드
+    selectedId = hit.id;
+    document.getElementById('sizeControl').style.display = 'flex';
+    sizeRange.value = shapes.find(s=>s.id===selectedId).size;
+    sizeVal.textContent = sizeRange.value;
+    drawAll();
+    return;
+  }
+  // 아니면 새 도형 추가
+  if (!currentTool) { alert('도형(○△□S)을 먼저 선택하세요.'); return; }
+  orderCounter++;
+  const newShape = { id: Date.now() + Math.random(), type: currentTool, x: pos.x, y: pos.y, size: parseInt(sizeRange.value,10), order: orderCounter };
+  shapes.push(newShape);
+  drawAll();
+});
+
+// 드래그로 이동 (선택된 도형을 잡아 이동)
+let dragging=false, dragOffset={x:0,y:0};
+canvas.addEventListener('pointermove', (ev)=>{
+  if (!selectedId) return;
+  if (ev.pressure === 0) return; // not pressed
+  const pos = getPos(ev);
+  const s = shapes.find(it=>it.id===selectedId);
+  if (!s) return;
+  // when pointer down then move: set dragging true
+  if (!dragging){ dragging=true; dragOffset.x = pos.x - s.x; dragOffset.y = pos.y - s.y; }
+  s.x = pos.x - dragOffset.x;
+  s.y = pos.y - dragOffset.y;
+  drawAll();
+});
+canvas.addEventListener('pointerup', ()=>{ dragging=false; });
+
+/* 사이즈 슬라이더 */
+sizeRange.addEventListener('input', ()=>{
+  sizeVal.textContent = sizeRange.value;
+  if (selectedId){
+    const s = shapes.find(it=>it.id===selectedId);
+    if (s){ s.size = parseInt(sizeRange.value,10); drawAll(); }
+  }
+});
+function toggleSizeControl(show){
+  document.getElementById('sizeControl').style.display = show ? 'flex' : 'none';
+}
+
+/* Undo / Clear */
+document.getElementById('undo').addEventListener('click', ()=>{
+  if (shapes.length>0) shapes.pop();
+  selectedId = null; toggleSizeControl(false);
+  drawAll();
+});
+document.getElementById('clear').addEventListener('click', ()=>{
+  if (!confirm('모든 도형을 지우시겠습니까?')) return;
+  shapes = []; selectedId = null; orderCounter = 0; toggleSizeControl(false);
+  drawAll(); document.getElementById('output').innerHTML = '초기화되었습니다.';
+});
+
+/* 결과 분석 */
+function analyze(){
+  if (shapes.length === 0){ alert('도형을 먼저 배치하세요.'); return; }
+  // auto-detect chosen shape: the one drawn 3 times (or highest count)
+  const counts = shapes.reduce((acc,s)=>{ acc[s.type]=(acc[s.type]||0)+1; return acc; },{});
+  let chosen = Object.keys(counts).find(k=>counts[k]===3) || Object.keys(counts).reduce((a,b)=>counts[a]>counts[b]?a:b);
+  // zones: top/mid/bottom & left/center/right (use thirds)
+  function zoneFor(s){
+    const vx = s.x, vy = s.y;
+    const col = vx < canvas.width/3 ? '좌측' : vx > canvas.width*2/3 ? '우측' : '중앙';
+    const row = vy < canvas.height/3 ? '상단' : vy > canvas.height*2/3 ? '하단' : '중단';
+    return {row,col};
+  }
+  // derive per-type summaries and location-based modifiers
+  const typeProfile = {
+    circle:{
+      label:'○ 동그라미',
+      base:['감수성이 풍부하고 타인에 대한 공감 능력이 뛰어납니다.','관계의 조화를 중시하며 협력과 배려를 통해 안정감을 얻습니다.','타인에게 친절한 인상과 신뢰를 주는 성향입니다.'],
+      scent:'은은하고 포근한 플로럴·파우더리 계열이 잘 어울립니다.'
+    },
+    triangle:{
+      label:'△ 세모',
+      base:['목표지향적이며 명확한 의사결정과 추진력을 보입니다.','도전과 성취에서 동기를 얻고 책임감 있게 상황을 이끕니다.','경쟁 상황에서도 자신을 세우는 태도가 강합니다.'],
+      scent:'상큼한 시트러스 계열이나 페퍼리한 활력감 있는 향이 어울립니다.'
+    },
+    square:{
+      label:'□ 네모',
+      base:['조직적이고 계획적인 방식으로 문제를 해결하려 합니다.','안정과 신뢰를 중시하며 꾸준함으로 성과를 냅니다.','세부에 대한 섬세함과 책임감이 돋보입니다.'],
+      scent:'우디 또는 허브 계열의 차분하고 안정감 있는 향이 어울립니다.'
+    },
+    wave:{
+      label:'S (물결형)',
+      base:['창의적이고 유연한 사고를 지니며 틀에 얽매이지 않습니다.','직관과 상상력으로 새로운 관점을 잘 발견합니다.','감각적 표현과 즉흥적 발상이 매력적입니다.'],
+      scent:'머스크·바닐라 등 자유롭고 은은한 감성 계열의 향이 어울립니다.'
+    }
+  };
+
+  // build analyses
+  // 1) dominant type (chosen) -> build 3-line personality using variety
+  const dom = chosen;
+  const domProfile = typeProfile[dom];
+  // compose 3 rich lines: mix base lines + location clues
+  // location prominence: for each type, see where its instances are (some might be multiple)
+  const grouped = {};
+  shapes.forEach(s=>{
+    grouped[s.type] = grouped[s.type] || [];
+    grouped[s.type].push(zoneFor(s));
+  });
+
+  function locationSentence(type){
+    const list = grouped[type] || [];
+    if (list.length===0) return '';
+    // find most frequent row+col
+    const rowCount = {상단:0,중단:0,하단:0}; const colCount = {좌측:0,중앙:0,우측:0};
+    list.forEach(z => { rowCount[z.row]++; colCount[z.col]++; });
+    const row = Object.keys(rowCount).reduce((a,b)=>rowCount[a]>rowCount[b]?a:b);
+    const col = Object.keys(colCount).reduce((a,b)=>colCount[a]>colCount[b]?a:b);
+    // map to interpretive phrase
+    const rowPhrase = row==='상단' ? '현재 장점이 잘 활성화되어 있고 행동으로 옮기기 좋은 상태입니다.' :
+                      row==='중단' ? '장점이 내부에 잠재해 있어 표현까지 시간이 걸릴 수 있습니다.' :
+                      '해당 성향의 에너지가 줄어들어 내부적 고민이나 부담이 있을 수 있습니다.';
+    const colPhrase = col==='우측' ? '현재 자신감과 외향적 표현이 강합니다.' :
+                      col==='중앙' ? '해당 성향이 균형을 이루고 있어 안정적입니다.' :
+                      '과거 중심의 경험이나 관심이 남아 있을 수 있습니다.';
+    return rowPhrase + ' ' + colPhrase;
+  }
+
+  const locSent_dom = locationSentence(dom);
+
+  // Compose final result: 3 lines personality + 1 scent line + some notes (use variety)
+  const personalityLines = [];
+  // choose 3 distinct base sentences (or combine)
+  const baseCandidates = domProfile.base.slice();
+  while (personalityLines.length < 3){
+    if (baseCandidates.length>0) personalityLines.push(baseCandidates.shift());
+    else personalityLines.push('더 깊은 탐색을 통해 다각도로 이해할 수 있습니다.');
+  }
+  // enrich with location note
+  personalityLines[2] = personalityLines[2] + ' ' + locSent_dom;
+
+  // scent
+  const scentLine = domProfile.scent;
+
+  // additional note: if any type appears in 하단 mention concern
+  const lowZones = shapes.filter(s => zoneFor(s).row === '하단').map(s=>s.type);
+  let caution = '';
+  if (lowZones.length){
+    const uniq = [...new Set(lowZones)];
+    const names = uniq.map(t => typeProfile[t].label).join(', ');
+    caution = `주의: ${names}이(가) 하단에 위치한 경우 해당 영역에서 에너지가 낮거나 스트레스 신호가 있을 수 있습니다. 필요시 휴식·지원·조절을 권장합니다.`;
+  }
+
+  // prepare output HTML
+  let outHtml = `<strong>주요 성격(요약)</strong><br>`;
+  outHtml += personalityLines.map(l => `<div class="line">• ${l}</div>`).join('');
+  outHtml += `<br><strong>추천 향기</strong><div class="line">• ${scentLine}</div>`;
+  if (caution) outHtml += `<hr style="border:none;border-top:1px dashed #eee;margin:8px 0"><div style="color:#b33">${caution}</div>`;
+  // also include compact profile listing zones for user feedback
+  outHtml += `<hr style="border:none;border-top:1px dashed #eee;margin:8px 0"><div style="font-size:13px;color:#666"><strong>디테일</strong><br>`;
+  shapes.forEach(s=>{
+    const z = zoneFor(s);
+    const label = typeProfile[s.type].label;
+    outHtml += `${label} (순서:${s.order}) — ${z.row} / ${z.col}<br>`;
+  });
+  outHtml += `</div>`;
+
+  document.getElementById('output').innerHTML = outHtml;
+}
+
+/* 버튼들 */
+document.getElementById('analyze').addEventListener('click', analyze);
+
+// 초기 렌더
+drawAll();
+
+/* 터치/마우스: 캔버스에서 선택된 상태를 해제하는 방법: 캔버스 바깥 탭 */
+document.addEventListener('pointerdown', (e)=>{
+  // if click outside canvas and not on control buttons, deselect
+  const rect = canvas.getBoundingClientRect();
+  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom){
+    selectedId = null; toggleSizeControl(false); drawAll();
+  }
+});
+
+// 화면 로드 시 size control 참조 element
+function toggleSizeControl(show){
+  document.getElementById('sizeControl').style.display = show ? 'flex' : 'none';
+}
+// show/hide sizeControl element in DOM for initial (create element)
+const sc = document.createElement('div');
+sc.id='sizeControl';
+sc.style.display='none';
+sc.innerHTML = `<span>크기:</span><input id="sizeRange2" type="range" min="20" max="140" value="40"><span id="sizeVal2">40</span> px`;
+document.body.appendChild(sc);
+const sizeRange2 = document.getElementById('sizeRange2');
+const sizeVal2 = document.getElementById('sizeVal2');
+sizeRange2.addEventListener('input', ()=>{
+  sizeVal2.textContent = sizeRange2.value;
+  if (selectedId){
+    const s = shapes.find(it=>it.id===selectedId);
+    if (s){ s.size = parseInt(sizeRange2.value,10); drawAll(); }
+  }
+});
+
+// When selection made in pointerdown above, show size control: we need to show it when selecting
+// So patch selection show logic into pointerdown: modify above pointerdown handling: add show here
+canvas.addEventListener('pointerdown', (ev)=>{
+  // duplicate logic to detect hit and show size control (ensures mobile works)
+  const pos = getPos(ev);
+  const hit = shapes.slice().reverse().find(s => {
+    const dx = pos.x - s.x, dy = pos.y - s.y;
+    return Math.hypot(dx,dy) <= Math.max( (s.size/2), 20 );
+  });
+  if (hit){
+    selectedId = hit.id;
+    sizeRange2.value = hit.size;
+    sizeVal2.textContent = hit.size;
+    toggleSizeControl(true);
+    drawAll();
+  }
+});
+
+// ensure only one active tool button at start
+shapeButtons.forEach((b,i)=>{ if(i===0){ b.classList.add('active'); currentTool = b.dataset.shape; } });
+</script>
+
+</body>
+</html>
