@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>○△□S 도형 심리테스트</title>
+<style>
+  body {
+    font-family: "Pretendard", sans-serif;
+    background: #fdf8f7;
+    text-align: center;
+    color: #2a2a75;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 22px;
+  }
+  p {
+    font-size: 14px;
+    line-height: 1.5em;
+  }
+  canvas {
+    background: transparent;
+    border: 2px solid #c58a6a;
+    position: relative;
+  }
+  #container {
+    position: relative;
+    display: inline-block;
+    margin: 20px;
+  }
+  .inner {
+    position: absolute;
+    border: 2px solid #c58a6a;
+    width: 180px;
+    height: 180px;
+    top: 90px;
+    left: 90px;
+  }
+  .buttons {
+    margin-top: 10px;
+  }
+  button {
+    font-size: 22px;
+    margin: 3px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border: 1px solid #888;
+    border-radius: 5px;
+    background: white;
+  }
+  #result {
+    text-align: left;
+    width: 360px;
+    margin: 20px auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    padding: 10px;
+    line-height: 1.5em;
+  }
+</style>
+</head>
+<body>
+
+<h1>○△□S 도형 심리테스트</h1>
+<p>1) 가장 마음에 드는 도형을 선택해 캔버스 위에 3번 배치하세요.<br>
+2) 나머지 도형도 각각 1번씩 자유롭게 배치하세요.</p>
+
+<div id="container">
+  <canvas id="canvas" width="360" height="360"></canvas>
+  <div class="inner"></div>
+</div>
+
+<div class="buttons">
+  <button data-shape="circle">○</button>
+  <button data-shape="triangle">△</button>
+  <button data-shape="square">□</button>
+  <button data-shape="wave">S</button>
+  <button id="analyze">결과 보기</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let shapes = [];
+let currentShape = null;
+
+// 도형 선택
+document.querySelectorAll('button[data-shape]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentShape = btn.dataset.shape;
+  });
+});
+
+// 클릭 시 도형 추가
+canvas.addEventListener('click', (e) => {
+  if (!currentShape) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const size = 40;
+  shapes.push({ type: currentShape, x, y, size });
+  drawShapes();
+});
+
+function drawShapes() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  shapes.forEach(s => {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#2a2a75";
+    switch(s.type) {
+      case "circle":
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size/2, 0, Math.PI*2);
+        ctx.stroke();
+        break;
+      case "triangle":
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - s.size/2);
+        ctx.lineTo(s.x - s.size/2, s.y + s.size/2);
+        ctx.lineTo(s.x + s.size/2, s.y + s.size/2);
+        ctx.closePath();
+        ctx.stroke();
+        break;
+      case "square":
+        ctx.strokeRect(s.x - s.size/2, s.y - s.size/2, s.size, s.size);
+        break;
+      case "wave":
+        ctx.beginPath();
+        for (let i=0; i<2; i++){
+          ctx.moveTo(s.x - s.size/2, s.y + i*10);
+          ctx.bezierCurveTo(s.x - s.size/4, s.y - 10 + i*10, s.x + s.size/4, s.y + 10 + i*10, s.x + s.size/2, s.y + i*10);
+        }
+        ctx.stroke();
+        break;
+    }
+  });
+}
+
+// 도형 해석 함수
+document.getElementById('analyze').addEventListener('click', () => {
+  let summary = "";
+  if (shapes.length === 0) {
+    document.getElementById('result').innerHTML = "도형을 먼저 배치하세요!";
+    return;
+  }
+
+  // 각 도형의 평균 좌표 계산
+  const center = 180; // 캔버스 중심
+  shapes.forEach(s => {
+    let vert = s.y < 120 ? "상단" : s.y > 240 ? "하단" : "중단";
+    let hori = s.x < 120 ? "좌측" : s.x > 240 ? "우측" : "중앙";
+    s.zone = vert + " " + hori;
+  });
+
+  const counts = { circle:0, triangle:0, square:0, wave:0 };
+  shapes.forEach(s => counts[s.type]++);
+
+  // 도형별 기본 성향
+  const traits = {
+    circle: "감성적이며 따뜻하고 관계 중심적인 성향",
+    triangle: "목표 지향적이고 리더십이 강한 성향",
+    square: "신중하고 체계적이며 안정감을 중시하는 성향",
+    wave: "창의적이고 유연하며 자유로운 사고를 지닌 성향"
+  };
+
+  // 도형별 상태 분석
+  let analysis = [];
+  shapes.forEach(s => {
+    let state = "";
+    if (s.zone.includes("상단")) state = "활성화된 장점이 드러나는 시기";
+    else if (s.zone.includes("중단")) state = "잠재력이 머무는 안정적 상태";
+    else state = "에너지가 떨어져 내면적 고민이 있을 가능성";
+
+    analysis.push(`${s.type === "circle"?"○":s.type==="triangle"?"△":s.type==="square"?"□":"S"}: ${traits[s.type]}이며, 현재는 ${state}입니다.`);
+  });
+
+  // 가장 많이 등장한 도형 = 주 성격
+  const dominant = Object.keys(counts).reduce((a,b) => counts[a] > counts[b] ? a : b);
+  const scent = {
+    circle: "따뜻하고 포근한 플로럴 향",
+    triangle: "시트러스 계열의 상쾌한 향",
+    square: "우디하거나 허브 계열의 안정감 있는 향",
+    wave: "창의적인 무드의 머스크·바닐라 향"
+  };
+
+  summary += `<b>성격 요약</b><br>${traits[dominant]}이(가) 주를 이루며,<br>`;
+  summary += "도형의 배치로 보아 심리적 균형과 에너지의 흐름이 드러납니다.<br>";
+  summary += "활성화된 도형과 하단의 도형을 함께 참고하면 현재 상태를 알 수 있습니다.<br><br>";
+  summary += `<b>추천 향기:</b> ${scent[dominant]} 🌿<br><br>`;
+  summary += analysis.join("<br>");
+
+  document.getElementById('result').innerHTML = summary;
+});
+</script>
+
+</body>
+</html>
