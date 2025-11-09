@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>○△□S 도형 테스트</title>
+<style>
+body {
+  font-family: "Noto Sans KR", sans-serif;
+  background-color: #f7f8fc;
+  color: #333;
+  text-align: center;
+  margin: 0;
+  padding: 20px;
+}
+h1 {
+  font-size: 28px;
+  margin-bottom: 5px;
+}
+.instructions {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 15px;
+  line-height: 1.4em;
+}
+#canvasContainer {
+  position: relative;
+  width: 480px;
+  height: 480px;
+  margin: 0 auto;
+  border: 2px solid #555;
+  background-color: #fff;
+}
+.smallSquare {
+  position: absolute;
+  top: 25%;
+  left: 25%;
+  width: 50%;
+  height: 50%;
+  border: 1px dashed #aaa;
+}
+.shapeButton {
+  margin: 5px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: #e4e6f0;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+}
+.shapeButton:hover {
+  background: #d0d3e0;
+}
+#controls {
+  margin-top: 10px;
+}
+#result {
+  margin-top: 25px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.1);
+  padding: 15px;
+  width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
+  white-space: pre-line;
+}
+.line { font-weight: bold; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>○△□S 도형 테스트</h1>
+<div class="instructions">
+1) 4개의 도형 중에서 가장 마음에 드는 도형 1개를 골라 크기나 위치에 관계없이 3번 그려주세요.<br>
+2) 나머지 3개의 도형도 크기 위치에 관련없이 각각 1번씩 자유롭게 그려주세요.
+</div>
+
+<div id="canvasContainer">
+  <div class="smallSquare"></div>
+  <canvas id="testCanvas" width="480" height="480"></canvas>
+</div>
+
+<div id="controls">
+  <button class="shapeButton" onclick="selectShape('○')">○</button>
+  <button class="shapeButton" onclick="selectShape('△')">△</button>
+  <button class="shapeButton" onclick="selectShape('□')">□</button>
+  <button class="shapeButton" onclick="selectShape('S')">S</button>
+  <button class="shapeButton" onclick="undoShape()">↩ 되돌리기</button>
+  <button class="shapeButton" onclick="analyzeResult()">결과 보기</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+const canvas = document.getElementById("testCanvas");
+const ctx = canvas.getContext("2d");
+let shapes = [];
+let currentShape = null;
+let selectedShape = null;
+
+function selectShape(shape) {
+  selectedShape = shape;
+}
+
+canvas.addEventListener("click", (e) => {
+  if (!selectedShape) return alert("도형을 선택하세요.");
+  if (shapes.length >= 6) return alert("최대 6개까지만 그릴 수 있습니다.");
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const size = 60 + Math.random() * 30; // 기본 크기
+
+  shapes.push({ type: selectedShape, x, y, size });
+  drawAll();
+});
+
+function drawAll() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  shapes.forEach(s => drawShape(s));
+}
+
+function drawShape(s) {
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#333";
+  const size = s.size;
+  switch (s.type) {
+    case "○":
+      ctx.arc(s.x, s.y, size / 2, 0, Math.PI * 2);
+      break;
+    case "△":
+      ctx.moveTo(s.x, s.y - size / 1.2);
+      ctx.lineTo(s.x - size / 1.2, s.y + size / 1.5);
+      ctx.lineTo(s.x + size / 1.2, s.y + size / 1.5);
+      ctx.closePath();
+      break;
+    case "□":
+      ctx.rect(s.x - size / 2, s.y - size / 2, size, size);
+      break;
+    case "S":
+      ctx.font = `${size * 1.1}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("S", s.x, s.y + size * 0.05);
+      break;
+  }
+  ctx.stroke();
+}
+
+function undoShape() {
+  shapes.pop();
+  drawAll();
+}
+
+function analyzeResult() {
+  if (shapes.length < 4) return alert("최소 4개의 도형을 그려주세요.");
+
+  let counts = {}, totalSize = 0, avgX = 0;
+  shapes.forEach(s => {
+    counts[s.type] = (counts[s.type] || 0) + 1;
+    totalSize += s.size;
+    avgX += s.x;
+  });
+
+  const avgSize = totalSize / shapes.length;
+  const avgPos = avgX / shapes.length;
+  const primary = Object.keys(counts).reduce((a,b)=>counts[a]>counts[b]?a:b);
+  const secondary = Object.keys(counts).filter(k=>k!==primary)
+    .reduce((a,b)=> (counts[a]||0) > (counts[b]||0) ? a : b);
+
+  const balance = avgPos < 160 ? "좌측" : avgPos > 320 ? "우측" : "중앙";
+
+  const traits = {
+    "○": "감성적이고 관계 중심적인 성향으로, 타인의 감정에 민감하며 협동적입니다.",
+    "△": "목표 지향적이고 결단력이 강하며 리더십이 뛰어납니다.",
+    "□": "신중하고 체계적이며 안정과 질서를 중시하는 성향입니다.",
+    "S": "창의적이고 유연하며 상상력과 적응력이 풍부합니다."
+  };
+
+  const scent = {
+    "○": "플로럴 계열 (라벤더, 재스민)",
+    "△": "시트러스 계열 (레몬, 베르가못)",
+    "□": "우디 계열 (샌달우드, 시더)",
+    "S": "그린티 & 세이지, 허벌 향"
+  };
+
+  let text = "성향\n";
+  text += `전체적으로 ${balance}에 치우쳐 있으며 `;
+  text += avgSize < 60 ? "에너지가 다소 낮고 내향적인 상태입니다.\n" :
+          avgSize > 90 ? "활동적이고 추진력이 강한 상태입니다.\n" :
+          "균형잡힌 심리 에너지를 보입니다.\n";
+  text += `주요 기질은 ${primary}형으로 ${traits[primary]}\n`;
+  if (secondary) text += `보조 기질은 ${secondary}형으로 ${traits[secondary]} 이 특성이 함께 작용합니다.\n`;
+
+  if (shapes.length === 6) text += "도형을 6개 모두 완성한 것으로 보아 집중력과 성취욕이 뚜렷합니다.\n";
+  if (balance === "좌측") text += "감정적 과거 회상이나 내적 성찰이 강할 수 있습니다.\n";
+  if (balance === "우측") text += "미래지향적이며 목표 달성에 강한 의지를 보입니다.\n";
+
+  text += "\n추천 향\n";
+  text += `${scent[primary]} 계열 향을 추천합니다.`;
+
+  document.getElementById("result").innerText = text;
+}
+</script>
+</body>
+</html>
