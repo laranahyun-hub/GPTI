@@ -1,0 +1,381 @@
+
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>○△□S 도형 테스트</title>
+<style>
+  :root{
+    --bg:#fbf6f4;
+    --title:#3c2f91;
+    --frame:#b9764f;
+    --accent:#3c2f91;
+    --btn-border:#e6e6e6;
+  }
+  html,body{height:100%;margin:0}
+  body{
+    font-family:"Pretendard","Noto Sans KR",system-ui,-apple-system,Arial;
+    background:var(--bg);color:#222;
+    display:flex;flex-direction:column;align-items:center;
+    padding:20px 16px 40px;
+  }
+  h1{color:var(--title);font-size:34px;margin:8px 0 6px;letter-spacing:2px}
+  .subtitle{color:var(--title);text-align:center;font-size:14px;margin:0 0 18px}
+  .board-wrap{position:relative;width:420px;max-width:92vw}
+  #board{
+    width:360px;height:360px;margin:0 auto;
+    background:#fff;border:4px solid var(--frame);box-sizing:border-box;position:relative;
+    touch-action:none; 
+  }
+  #inner{
+    position:absolute;width:180px;height:180px;left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    border:4px dashed rgba(183,132,112,0.35);pointer-events:none;
+  }
+  
+  .tools{display:flex;gap:12px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+  
+  .tool{width:64px;height:64px;border-radius:14px;border:2px solid var(--btn-border);
+    display:flex;align-items:center;justify-content:center;background:#fff;
+    font-size:28px;cursor:pointer;box-shadow:0 6px 20px rgba(60,47,145,0.06);
+    transition:transform .12s,background .12s,border-color .12s}
+  .tool.active{background:#efeefc;border-color:var(--accent);box-shadow:0 10px 26px rgba(60,47,145,0.14)}
+  .actions{display:flex;gap:12px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+  .btn{padding:10px 16px;border-radius:10px;border:1px solid var(--btn-border);
+    background:#fff;color:var(--accent);font-weight:600;cursor:pointer;}
+  .btn.primary{background:var(--accent);color:#fff;border:none;box-shadow:0 6px 18px rgba(60,47,145,0.16)}
+  .placed{position:absolute;user-select:none;display:flex;align-items:center;justify-content:center;
+    box-sizing:border-box;border-radius:8px;transform-origin:center center;
+    touch-action: none;
+  }
+  /* [추가/수정] SVG가 부모 크기에 맞게 조절되도록 설정 */
+  .placed svg { width: 100%; height: 100%; }
+
+  .placed .badge{position:absolute;right:4px;bottom:4px;background:var(--accent);color:#fff;font-size:11px;padding:2px 6px;border-radius:8px;z-index: 1;}
+  
+  .handle{position:absolute;width:16px;height:16px;right:-8px;bottom:-8px;background:#fff;border:2px solid var(--accent);border-radius:6px;box-shadow:0 4px 10px rgba(0,0,0,0.08);touch-action:none;cursor:se-resize;}
+  
+  .rotate-handle{position:absolute;width:14px;height:14px;top:-24px;left:50%;transform:translateX(-50%);background:#fff;border:2px solid var(--accent);border-radius:50%;cursor:grab;touch-action:none;}
+  
+  #resultBox{width:420px;max-width:92vw;margin:18px auto 0;text-align:left}
+  
+  .card{background:#fff;padding:14px;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.06)}
+  .card h3{margin:0 0 8px;color:var(--accent)}
+  .line{margin:8px 0;color:#222;line-height:1.6}
+  .scent{margin-top:8px;color:#4b4b4b;font-weight:600}
+  @media(max-width:420px){
+    #board{width:320px;height:320px}
+    #inner{width:160px;height:160px}
+    .tool{width:56px;height:56px;font-size:24px}
+    #resultBox{width:320px} 
+    .card{width:auto;}
+  }
+</style>
+</head>
+<body>
+
+<h1>○△□S 도형 테스트</h1>
+<div class="subtitle">가장 마음에 드는 도형을 3번, 나머지를 각각 1번씩 배치하세요.</div>
+
+<div class="board-wrap">
+  <div id="board"><div id="inner"></div></div>
+</div>
+
+<div class="tools">
+  <div class="tool active" data-shape="circle">○</div>
+  <div class="tool" data-shape="triangle">△</div>
+  <div class="tool" data-shape="square">□</div>
+  <div class="tool" data-shape="wave">S</div>
+</div>
+
+<div class="actions">
+  <button id="undo" class="btn">Undo</button>
+  <button id="reset" class="btn">초기화</button>
+  <button id="analyze" class="btn primary">결과 보기</button>
+</div>
+
+<div id="resultBox">
+  <div class="card">
+    <h3>검사 결과</h3>
+    <div id="resultContent">
+      <div class="line">도형을 배치한 뒤 '결과 보기'를 눌러주세요.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const board=document.getElementById('board');
+const tools=document.querySelectorAll('.tool');
+let currentTool='circle', placed=[], orderCounter=0;
+const resultContent=document.getElementById('resultContent');
+
+tools.forEach(t=>{
+  t.addEventListener('click',()=>{
+    tools.forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    currentTool=t.dataset.shape;
+  });
+});
+
+board.addEventListener('pointerdown',ev=>{
+  if(ev.target!==board)return;
+  if(placed.length>=6){alert('최대 6개까지만 배치할 수 있습니다.');return;}
+  const rect=board.getBoundingClientRect();
+  addPlaced(currentTool,ev.clientX-rect.left,ev.clientY-rect.top,60);
+});
+
+function addPlaced(type,x,y,size){
+  orderCounter++;
+  const el=document.createElement('div');
+  el.className='placed';
+  el.style.left=(x-size/2)+'px';
+  el.style.top=(y-size/2)+'px';
+  el.style.width=size+'px';
+  el.style.height=size+'px';
+  el.dataset.id=Date.now()+Math.random();
+  el.dataset.type=type;
+  el.style.zIndex=100+orderCounter;
+  el.dataset.rotate=0;
+
+  const rec={el,type,left:x-size/2,top:y-size/2,size,rotate:0, sTextElement: null};
+
+  // [핵심 수정] SVG에 width="100%" height="100%" 속성을 추가하여 부모 div 크기에 종속되게 함
+  if(type==='circle')
+    el.innerHTML=`<svg viewBox="0 0 100 100" width="100%" height="100%"><circle cx="50" cy="50" r="42" stroke="#3c2f91" stroke-width="6" fill="none"/></svg><div class="badge">${orderCounter}</div>`;
+  else if(type==='triangle')
+    el.innerHTML=`<svg viewBox="0 0 100 100" width="100%" height="100%"><polygon points="50,8 8,92 92,92" stroke="#3c2f91" stroke-width="6" fill="none"/></svg><div class="badge">${orderCounter}</div>`;
+  else if(type==='square')
+    el.innerHTML=`<svg viewBox="0 0 100 100" width="100%" height="100%"><rect x="8" y="8" width="84" height="84" stroke="#3c2f91" stroke-width="6" fill="none"/></svg><div class="badge">${orderCounter}</div>`;
+  else {
+    const sText = document.createElement('div');
+    sText.style.fontSize = `${size * 0.9}px`; 
+    sText.style.color = '#3c2f91';
+    sText.style.fontWeight = '700';
+    sText.style.lineHeight = '1';
+    sText.textContent = 'S';
+    el.appendChild(sText);
+    
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = orderCounter;
+    el.appendChild(badge);
+
+    rec.sTextElement = sText; 
+  }
+
+  const handle=document.createElement('div');handle.className='handle';
+  const rot=document.createElement('div');rot.className='rotate-handle';
+  
+  el.appendChild(handle);
+  el.appendChild(rot);
+  board.appendChild(el);
+
+  placed.push(rec);
+  makeInteractive(el,handle,rot,rec); 
+}
+
+function makeInteractive(el,handle,rot,rec){
+  // 1. 도형 이동
+  el.addEventListener('pointerdown',ev=>{
+    if(ev.target===handle||ev.target===rot)return; 
+        
+    const startX=ev.clientX,startY=ev.clientY;
+    const startLeft=parseFloat(el.style.left),startTop=parseFloat(el.style.top);
+    function move(mv){
+      const nx=Math.max(0,Math.min(board.clientWidth-rec.size,startLeft+(mv.clientX-startX)));
+      const ny=Math.max(0,Math.min(board.clientHeight-rec.size,startTop+(mv.clientY-startY)));
+      el.style.left=nx+'px';el.style.top=ny+'px';rec.left=nx;rec.top=ny;
+    }
+    function up(){window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);}
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
+  });
+
+  // 2. 크기 조절 (핸들)
+  handle.addEventListener('pointerdown',ev=>{
+    ev.stopPropagation(); 
+    const startX=ev.clientX,startY=ev.clientY;
+    const startSize=rec.size;
+
+    function move(mv){
+      const dx=mv.clientX-startX;
+      const dy=mv.clientY-startY;
+
+      // X/Y 중 더 큰 변화량에 따라 크기 변경 (대각선 드래그 효과)
+      const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+      
+      const newSize=Math.max(20,Math.min(200,Math.round(startSize+d)));
+
+      // 위치 보정: 크기 조절의 기준점을 왼쪽 위로 가정하고 보정 (안하면 중앙 정렬이 깨짐)
+      const sizeDiff = newSize - rec.size;
+      const newLeft = rec.left - sizeDiff / 2;
+      const newTop = rec.top - sizeDiff / 2;
+
+      // 보드 경계를 벗어나지 않도록 최종 위치 제한
+      const finalLeft = Math.max(0, Math.min(board.clientWidth - newSize, newLeft));
+      const finalTop = Math.max(0, Math.min(board.clientHeight - newSize, newTop));
+
+      // 크기와 위치 적용
+      rec.size=newSize;
+      rec.left=finalLeft;
+      rec.top=finalTop;
+      el.style.width=newSize+'px';
+      el.style.height=newSize+'px';
+      el.style.left=finalLeft+'px';
+      el.style.top=finalTop+'px';
+      
+      // 'S' 도형인 경우, 폰트 크기 업데이트
+      if (rec.type === 'wave' && rec.sTextElement) {
+        rec.sTextElement.style.fontSize = `${newSize * 0.9}px`;
+      }
+    }
+    function up(){window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);}
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',up);
+  });
+
+  // 3. 회전
+  rot.addEventListener('pointerdown',ev=>{
+    ev.stopPropagation();
+    const rect=el.getBoundingClientRect();
+    const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+    function move(mv){
+      const angle=Math.atan2(mv.clientY-cy,mv.clientX-cx)*180/Math.PI;
+      rec.rotate=angle;el.style.transform=`rotate(${angle}deg)`;
+    }
+    function up(){window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);}
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
+  });
+} // makeInteractive 함수 끝
+
+document.getElementById('undo').onclick=()=>{if(!placed.length)return;placed.pop().el.remove();}
+document.getElementById('reset').onclick=()=>{
+  if(!confirm('모든 도형을 지우시겠습니까?'))return;
+  placed.forEach(p=>p.el.remove());placed=[];orderCounter=0;
+  resultContent.innerHTML=`<div class="line">도형을 배치한 뒤 '결과 보기'를 눌러주세요.</div>`;
+};
+
+/* ==== 도형심리프로파일 기반 정교 해석 ==== */
+document.getElementById('analyze').onclick = () => {
+  if (placed.length < 4) {
+    alert('모든 도형을 배치한 뒤 실행하세요.');
+    return;
+  }
+
+  // 1️⃣ 기본 데이터 정리
+  const counts = {};
+  placed.forEach(p => counts[p.type] = (counts[p.type] || 0) + 1);
+
+  // 1차 기질 (3회 등장 도형 또는 최다)
+  const dominant = Object.keys(counts).find(k => counts[k] === 3) ||
+                   Object.keys(counts).reduce((a,b)=>(counts[a]||0)>=(counts[b]||0)?a:b);
+  // 2차 기질 (두 번째로 많이 등장 or 중심 위치)
+  let secondary = Object.keys(counts).filter(k => k !== dominant)
+                    .reduce((a,b)=>(counts[a]||0)>=(counts[b]||0)?a:b);
+  if (!secondary) secondary = Object.keys(counts).find(k => k !== dominant);
+
+  // 중심에 가장 가까운 도형 찾기 (보드 중앙 기준)
+  const center = {x: board.clientWidth/2, y: board.clientHeight/2};
+  const centerShape = placed.reduce((closest, p)=>{
+    const cx = p.left + p.size/2, cy = p.top + p.size/2;
+    const dist = Math.hypot(center.x - cx, center.y - cy);
+    return dist < closest.dist ? {type:p.type, dist} : closest;
+  }, {type:null, dist:Infinity}).type;
+  if (centerShape && centerShape !== dominant) secondary = centerShape;
+
+  // 2️⃣ 전체적 느낌(배치 균형) 분석
+  const avgX = placed.reduce((s,p)=>s+(p.left+p.size/2),0)/placed.length;
+  const avgY = placed.reduce((s,p)=>s+(p.top+p.size/2),0)/placed.length;
+  const deviationX = Math.abs(avgX - center.x);
+  const deviationY = Math.abs(avgY - center.y);
+
+  let balanceDesc = '';
+  if (deviationX < 40 && deviationY < 40) balanceDesc = '도형이 균형감 있게 배치되어 삶의 조화와 내적 안정감이 느껴집니다.';
+  else if (deviationX > 100 || deviationY > 100) balanceDesc = '도형이 한쪽으로 치우쳐 있어 사고나 감정이 한 방향으로 쏠리는 경향이 있습니다.';
+  else balanceDesc = '균형을 유지하려 하지만 내면적으로 약간의 긴장이나 불균형이 존재합니다.';
+
+  // 도형 크기 평균 → 에너지 수준
+  const avgSize = placed.reduce((s,p)=>s+p.size,0)/placed.length;
+  let energyDesc = '';
+  if (avgSize > 100) energyDesc = '도형이 크게 표현되어 있으며, 이는 높은 심리 에너지와 적극적인 생활 태도를 나타냅니다.';
+  else if (avgSize < 50) energyDesc = '도형의 크기가 작아 내면의 위축이나 피로감이 반영되어 있을 수 있습니다.';
+  else energyDesc = '적절한 크기의 도형으로 에너지 수준이 안정되어 있습니다.';
+
+  // 3️⃣ 각 도형 기본 성향
+  const profile = {
+    circle:{
+      title:'동그라미 (감성·관계형)',
+      traits:[
+        '감정이 섬세하고 타인의 기분 변화에 민감합니다.',
+        '조화와 관계를 중시하며 갈등을 피하려는 경향이 있습니다.',
+        '상대방을 편안하게 만들어주는 온화한 기질을 지닙니다.'
+      ],
+      scent:'플로럴·파우더리 계열 (라벤더, 재스민)'
+    },
+    triangle:{
+      title:'세모 (목표·리더형)',
+      traits:[
+        '명확한 목표와 방향성을 가지고 추진합니다.',
+        '판단력과 결단력이 뛰어나며, 리더 역할을 맡는 경우가 많습니다.',
+        '경쟁적 상황에서 성취욕이 강하게 나타납니다.'
+      ],
+      scent:'시트러스·스파이시 계열 (오렌지, 그레이프프룻)'
+    },
+    square:{
+      title:'네모 (안정·체계형)',
+      traits:[
+        '현실적이고 계획적인 사고를 지향합니다.',
+        '책임감이 강하며 일관성 있는 태도로 신뢰를 얻습니다.',
+        '변화보다 안정된 환경에서 능력을 발휘합니다.'
+      ],
+      scent:'우디·허브 계열 (샌달우드, 시더)'
+    },
+    wave:{
+      title:'S (창의·유연형)',
+      traits:[
+        '감수성과 직관이 발달해 예술적, 창의적 표현에 능합니다.',
+        '유연한 사고로 새로운 관점을 쉽게 받아들입니다.',
+        '통제보다는 자유로움을 선호하며 상상력이 풍부합니다.'
+      ],
+      scent:'머스크·바닐라 계열 (프루티 톤 포함)'
+    }
+  };
+
+  // 4️⃣ 1차·2차 기질 조합 해석
+  const comboDesc = {
+    'circle-triangle':'감성과 목표의 균형형으로, 인간관계 속에서도 명확한 의사결정 능력을 보입니다.',
+    'triangle-circle':'리더십에 따뜻함이 더해진 유형으로, 팀을 이끌면서도 공감적 조화를 중시합니다.',
+    'circle-square':'안정과 관계 중심의 조화형으로, 신중하면서도 따뜻한 성향을 보입니다.',
+    'square-circle':'실제적이면서도 감정적으로 섬세한 현실적 공감형입니다.',
+    'triangle-square':'체계적인 리더형으로, 성취를 위해 구조를 세우는 능력이 돋보입니다.',
+    'square-triangle':'책임감과 추진력이 결합된 실행형으로, 일의 완성도를 중시합니다.',
+    'circle-wave':'감성적 상상력형으로, 예술적 감수성과 타인 이해력이 뛰어납니다.',
+    'wave-circle':'감정과 창의가 유기적으로 융합된 표현형으로, 정서적 직관이 돋보입니다.',
+    'triangle-wave':'목표 지향성과 창의성이 융합되어 혁신을 추구하는 유형입니다.',
+    'wave-triangle':'새로운 아이디어를 리더십으로 실현하는 창조적 주도형입니다.',
+    'square-wave':'구조 속의 창의형으로, 논리적이면서도 유연하게 문제를 해결합니다.',
+    'wave-square':'감각적이지만 체계적인 사고를 겸비한 조화형입니다.'
+  };
+  const comboKey = `${dominant}-${secondary}`;
+  const comboLine = comboDesc[comboKey] || '주요 성향이 한쪽으로 뚜렷하게 나타나며 내면의 균형이 과제로 보입니다.';
+
+  // 5️⃣ 결과 출력 구성
+  const d1 = profile[dominant];
+  const d2 = profile[secondary];
+
+  let html = `<div class="line"><strong>성향</strong></div>`;
+  html += `<div class="line">주 기질: <b>${d1.title}</b></div>`;
+  d1.traits.forEach(l=> html += `<div class="line">• ${l}</div>`);
+  html += `<div class="line">보조 기질: <b>${d2.title}</b></div>`;
+  d2.traits.forEach(l=> html += `<div class="line">• ${l}</div>`);
+  html += `<div class="line">${comboLine}</div>`;
+  html += `<div class="line">${balanceDesc}</div>`;
+  html += `<div class="line">${energyDesc}</div>`;
+  html += `<div class="line"><strong>추천 향</strong></div>`;
+  html += `<div class="scent">• ${d1.scent}</div>`;
+
+  resultContent.innerHTML = html;
+};
+</script>
+</body>
+</html>
